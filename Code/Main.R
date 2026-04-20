@@ -146,3 +146,103 @@ stargazer(df_bench, type = "latex", summary = FALSE, rownames = FALSE,
           float = FALSE)
 
 cat("\nProject Code Execution Completed Successfully. Outputs saved to /Output.\n")
+
+# ==============================================================================
+# 6. Mechanism: Monte Carlo Simulation of Paths
+# ==============================================================================
+cat("\n--- Phase 5: Simulating Life-Cycle Paths (Mechanisms) ---\n")
+
+# We simulate the exact policy paths for a given initial wealth
+simulate_agent <- function(sol, path, initial_wealth) {
+  a <- numeric(T_periods + 1)
+  c <- numeric(T_periods)
+  a[1] <- initial_wealth
+  
+  # For simplicity, we assume they stay in the 'Normal' income state (y=2)
+  # A full MC would draw from the Markov TM, but here we want clean mechanism visualization
+  for (t in 1:T_periods) {
+    if (path == "S" && t <= T_school) {
+      inc <- omega$benefit - omega$cost_edu
+    } else if (path == "S" && t > T_school) {
+      inc <- omega$w_H * omega$Y_H_grid[2]
+    } else {
+      inc <- omega$w_L * omega$Y_L_grid[2]
+    }
+    
+    # Interpolate policy function to find optimal savings for tomorrow
+    a1 <- interp1D(Kgrid[t+1, ], sol$gK[t, , 2], a[t])
+    a[t+1] <- a1
+    
+    # Budget constraint
+    c[t] <- a[t] + inc - a1 / (1.0 + theta$r)
+  }
+  return(data.frame(Age = 1:T_periods, Consumption = c, Assets = a[1:T_periods], Path = path, A0 = initial_wealth))
+}
+
+# Simulate a "Rich" student (A0 = 1.0) and a "Poor" worker (A0 = 0.2)
+sim_student <- simulate_agent(sol_S, "S", 1.0)
+sim_worker  <- simulate_agent(sol_W, "W", 0.2)
+
+df_sims <- bind_rows(sim_student, sim_worker) %>%
+  mutate(Profile = paste(Path, "A0 =", A0))
+
+p_cons <- ggplot(df_sims, aes(x = Age, y = Consumption, color = Profile, linetype = Profile)) +
+  geom_line(linewidth = 1) +
+  labs(title = "Consumption Path Mechanism", y = "Consumption") + theme_minimal()
+
+p_assets <- ggplot(df_sims, aes(x = Age, y = Assets, color = Profile, linetype = Profile)) +
+  geom_line(linewidth = 1) +
+  labs(title = "Asset Accumulation Mechanism", y = "Assets") + theme_minimal()
+
+p_mechanisms <- p_cons / p_assets
+ggsave("Output/Figures/mechanism_paths.png", p_mechanisms, width = 8, height = 7, dpi = 300)
+
+
+# ==============================================================================
+# 7. Robustness and Counterfactuals (Changing Parameters)
+# ==============================================================================
+cat("\n--- Phase 6: Robustness to Interest Rate and Policy Benefit ---\n")
+
+# Helper function to compute Threshold A* for a given parameter set
+get_threshold <- function(temp_theta, temp_omega) {
+  temp_MinMaxA <- min_and_max_assets(temp_theta, max_possible_income)
+  temp_Kgrid   <- get_K_Grid(temp_theta, temp_MinMaxA)
+  
+  t_sol_W <- solve_model_path(temp_theta, temp_omega, temp_Kgrid, "W")
+  t_sol_S <- solve_model_path(temp_theta, temp_omega, temp_Kgrid, "S")
+  
+  diff <- t_sol_S$V[1, , temp_omega$Yint_0] - t_sol_W$V[1, , temp_omega$Yint_0]
+  
+  idx <- which(diff >= 0)[1]
+  if(is.na(idx)) return(NA)
+  return(temp_Kgrid[1, idx])
+}
+
+# 7.1 Robustness to Interest Rate (r = 0.02 vs r = 0.08)
+cat("Testing Interest Rates...\n")
+theta_low_r <- theta; theta_low_r$r <- 0.02
+theta_high_r <- theta; theta_high_r$r <- 0.08
+
+A_star_low_r <- get_threshold(theta_low_r, omega)
+A_star_high_r <- get_threshold(theta_high_r, omega)
+
+# 7.2 Counterfactual Policy (Doubling the Benefit B)
+cat("Testing Policy Counterfactual...\n")
+omega_high_B <- omega; omega_high_B$benefit <- 0.4
+
+A_star_high_B <- get_threshold(theta, omega_high_B)
+
+# Compile results
+df_robust <- data.frame(
+  Scenario = c("Baseline (r=0.05, B=0.2)", "Low Interest (r=0.02)", "High Interest (r=0.08)", "Expanded Policy (B=0.4)"),
+  Threshold_A_star = c(A_star, A_star_low_r, A_star_high_r, A_star_high_B)
+)
+
+print(df_robust)
+
+stargazer(df_robust, type = "latex", summary = FALSE, rownames = FALSE,
+          title = "Sensitivity Analysis: Minimum Wealth to Study (Threshold A*)",
+          out = "Output/Tables/robustness_thresholds.tex",
+          float = FALSE)
+
+cat("\nProject Code Execution Completed Successfully. Outputs saved to /Output.\n")
