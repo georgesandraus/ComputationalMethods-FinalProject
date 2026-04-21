@@ -4,7 +4,7 @@
 # ==============================================================================
 
 # Environment 
-T_periods <- 50    # Number of time periods (e.g., age 15 to 65)
+T_periods <- 50    # Number of time periods (age 15 to 65)
 T_school  <- 3     # Periods where studying is a choice (t = 1, 2, 3)
 NK        <- 500   # Number of points in the asset grid
 NY        <- 3     # Number of states in the income Markov process
@@ -12,10 +12,10 @@ NSIM      <- 10000 # Number of simulated individuals
 
 # Preferences and Financial Parameters (theta)
 theta <- list(
-  beta    = 0.95,  # Discount factor (could be lowered later to test myopia)
+  beta    = 0.95,  # Discount factor
   gamma   = 1.5,   # Coefficient of relative risk aversion
   r       = 0.05,  # Interest rate
-  A0      = 0.5,   # Initial assets (low wealth scenario)
+  A0      = 0.5,   # Initial assets
   minCons = 1e-4   # Minimum consumption (to avoid log(0) or division by zero)
 )
 
@@ -29,7 +29,7 @@ omega <- list(
   cost_edu = 0.3,  # Opportunity/direct cost of studying per period
   
   # "Pé-de-Meia" conditional cash transfer per period, with an approx. total value of 0.6.
-  # Now a vector allowing us to test different timing designs (e.g., front-loaded vs end-loaded)
+  # Now a vector allowing us to test different timing designs
   benefit_path  = c(0.2, 0.2, 0.2), 
   
   # Markov Process for Low-Skilled (High Variance / High Risk)
@@ -52,5 +52,5 @@ omega <- list(
 )
 
 # Computational Settings
-grid_spacing  <- "logsteps" # "equalsteps" or "logsteps"
-interp_method <- "linear"   # We'll use linear via 'approx' in R for robust monotonic interpolation
+grid_spacing  <- "logsteps"
+interp_method <- "linear"  

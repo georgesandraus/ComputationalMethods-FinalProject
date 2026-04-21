@@ -3,10 +3,10 @@
 # Description: Helper routines for Grid construction and Interpolation.
 # ==============================================================================
 
-#' Generates the Asset Grid (KGrid)
-#' @param theta List of economic parameters
-#' @param MinMaxA Matrix (T_periods+1 x 2) with minimum and maximum feasible assets
-#' @return A matrix of dimensions (T_periods+1 x NK)
+# Generates the Asset Grid (KGrid)
+# Argument: theta - List of economic parameters
+# Argument: MinMaxA - Matrix (T_periods+1 x 2) with minimum and maximum feasible assets
+# Function: A matrix of dimensions (T_periods+1 x NK)
 get_K_Grid <- function(theta, MinMaxA) {
   
   Kgrid <- matrix(0, nrow = T_periods + 1, ncol = NK)
@@ -49,21 +49,21 @@ get_K_Grid <- function(theta, MinMaxA) {
   return(Kgrid)
 }
 
-#' Wrapper for 1D Interpolation
-#' @param Xgrid Vector of x values (asset grid)
-#' @param Ygrid Vector of y values (value function)
-#' @param x Target point to interpolate
-#' @return Interpolated value
+# 1D Interpolation
+# Argument: Xgrid - Vector of x values (asset grid)
+# Argument: Ygrid - Vector of y values (value function)
+# Argument: x - Target point to interpolate
+# Function: Interpolated value
 interp1D <- function(Xgrid, Ygrid, x) {
   # Defensive check: ensure no NAs in interpolation data
   if(any(is.na(Ygrid))) stop("NAs found in Ygrid during interpolation")
   
   if (interp_method == "linear") {
-    # rule = 2 ensures that if the optimizer queries slightly out of bounds, 
+    # rule = 2 ensures that if the optimizer lies slightly out of bounds, 
     # it returns the nearest extreme value without throwing an NA
     res <- approx(x = Xgrid, y = Ygrid, xout = x, method = "linear", rule = 2)$y
   } else {
-    stop("Interpolation method not supported in this R adaptation.")
+    stop("Interpolation method not supported.")
   }
   return(res)
 }

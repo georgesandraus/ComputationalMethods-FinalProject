@@ -31,7 +31,7 @@ source("Code/functions.R")
 source("Code/solveModel.R")
 
 # ==============================================================================
-# 2. Initialization and Sanity Checks
+# 2. Initialization
 # ==============================================================================
 cat("\n--- Phase 1: Initializing Model Constraints ---\n")
 
@@ -106,13 +106,14 @@ p_choice <- ggplot(df_choice, aes(x = Initial_Wealth)) +
   theme_minimal() +
   theme(legend.position = "bottom")
 
-ggsave("Output/Figures/discrete_choice_t1.pdf", p_choice, width = 8, height = 5, dpi = 300)
+ggsave("Output/Figures/discrete_choice_t1.pdf", p_choice, 
+       width = 8, height = 5, dpi = 300)
 
 # ==============================================================================
-# 5. Computational Benchmarking (N_Grid vs Execution Time)
+# 5. Computational Benchmarking
 # ==============================================================================
 cat("\n--- Phase 4: Computational Benchmarking ---\n")
-cat("Running Microbenchmark (NK=100 vs NK=500). Please wait, this takes time...\n")
+cat("Running Microbenchmark (NK=100 vs NK=500)")
 
 benchmark_model <- function(test_NK) {
   assign("NK", test_NK, envir = .GlobalEnv)
@@ -126,7 +127,7 @@ mb_results <- microbenchmark(
   times = 1 
 )
 
-assign("NK", 500, envir = .GlobalEnv) # Restore high precision grid
+assign("NK", 500, envir = .GlobalEnv) # Restore previous grid
 
 df_bench <- summary(mb_results, unit = "s") %>%
   mutate(
@@ -207,8 +208,8 @@ cat("\n--- Phase 6: Testing Different Program Designs (Timing) ---\n")
 policy_designs <- list(
   "No Policy"             = c(0.0, 0.0, 0.0),
   "Even (Baseline)"       = c(0.2, 0.2, 0.2),
-  "End-Loaded (Bonus)"    = c(0.0, 0.0, 0.6), # Big bonus at graduation
-  "Front-Loaded (Rescue)" = c(0.4, 0.1, 0.1)  # Heavy support in the 1st year
+  "End-Loaded"    = c(0.0, 0.0, 0.6), # Big bonus at graduation
+  "Front-Loaded" = c(0.4, 0.1, 0.1)  # Heavy support in the 1st year
 )
 
 df_policy_V <- data.frame()
@@ -218,7 +219,7 @@ for (p_name in names(policy_designs)) {
   temp_omega <- omega
   temp_omega$benefit_path <- policy_designs[[p_name]]
   
-  # Re-solve ONLY the Study path (Work paths sol_W and sol_H are reused!)
+  # Re-solve only the Study path (Work paths sol_W and sol_H are reused)
   t_sol_S <- solve_student_path(theta, temp_omega, Kgrid, sol_W$V, sol_H$V)
   V_S_temp <- t_sol_S$V_S[1, ]
   
@@ -242,7 +243,8 @@ stargazer(df_policy_results, type = "latex", summary = FALSE, rownames = FALSE,
           title = "Policy Design Comparison: Minimum Wealth Required to Study",
           out = "Output/Tables/policy_designs.tex", float = FALSE)
 
-# Plotting the Value Functions of the Policies
+# Plotting the Value Functions of the Policies (I won't insert this in the final
+# pdf)
 df_plot_policy <- df_policy_V %>% filter(Initial_Wealth <= 2.0 & V_Study > -100)
 df_plot_W <- df_choice %>% filter(Initial_Wealth <= 2.0 & V_Work > -100)
 
@@ -253,13 +255,12 @@ p_designs <- ggplot() +
   geom_line(data = df_plot_policy, aes(x = Initial_Wealth, y = V_Study, 
                                        color = Policy), linewidth = 1.2) +
   coord_cartesian(ylim = c(-30, -5)) +
-  labs(
-    title = "Impact of Benefit Timing on Lifetime Utility",
-    subtitle = "Front-loading helps the poorest cross the threshold; End-loading fails due to credit constraints.",
-    x = "Initial Wealth (Assets)", y = "Expected Lifetime Utility at t=1", color = "Program Design", linetype = ""
+  labs(x = "Initial Wealth (Assets)", y = "Expected Lifetime Utility at t=1", 
+       color = "Program Design", linetype = ""
   ) +
   theme_minimal() + theme(legend.position = "right")
 
-ggsave("Output/Figures/policy_designs_comparison.pdf", p_designs, width = 9, height = 5, dpi = 300)
+ggsave("Output/Figures/policy_designs_comparison.pdf", p_designs, 
+       width = 9, height = 5, dpi = 300)
 
-cat("\nProject Code Execution Completed Successfully. Outputs saved to /Output.\n")
+cat("\nCode Completed Successfully. Outputs saved to /Output.\n")

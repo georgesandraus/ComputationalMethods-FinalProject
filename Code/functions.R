@@ -34,7 +34,7 @@ u <- function(c, theta) {
   }
 }
 
-#' Objective Function for Workers (Faces Markov Income Shocks)
+# Objective Function for Workers (Faces Markov Income Shocks)
 obj_func_worker <- function(A1, A0, IncomeNow, Kchoice, VNext, TM, y, theta) {
   c <- A0 + IncomeNow - A1 / (1.0 + theta$r)
   V_tomorrow <- 0.0
@@ -44,7 +44,7 @@ obj_func_worker <- function(A1, A0, IncomeNow, Kchoice, VNext, TM, y, theta) {
   return( -(u(c, theta) + theta$beta * V_tomorrow) )
 }
 
-#' Objective Function for Students (Deterministic income, Continuation Value is 1D)
+# Objective Function for Students (Deterministic income)
 obj_func_student <- function(A1, A0, IncomeNow, Kchoice, VNext1D, theta) {
   c <- A0 + IncomeNow - A1 / (1.0 + theta$r)
   V_tomorrow <- interp1D(Kchoice, VNext1D, A1)

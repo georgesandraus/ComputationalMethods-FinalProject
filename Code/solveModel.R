@@ -4,7 +4,7 @@
 #              dropout option for students.
 # ==============================================================================
 
-#' Solves the standard working life-cycle (Low-Skilled or High-Skilled)
+# Solves the standard working life-cycle (Low-Skilled or High-Skilled)
 solve_worker_path <- function(theta, omega, Kgrid, skill) {
   if (skill == "L") {
     Income_Grid <- omega$Y_L_grid; TM <- omega$TM_L; wage_base <- omega$w_L
@@ -42,7 +42,7 @@ solve_worker_path <- function(theta, omega, Kgrid, skill) {
   return(list(V = V, gK = gK))
 }
 
-#' Solves the 3-year schooling phase, incorporating the sequential option to drop out
+# Solves the 3-year schooling phase, incorporating the sequential option to drop out
 solve_student_path <- function(theta, omega, Kgrid, V_W, V_H) {
   V_S   <- matrix(0, nrow = T_school, ncol = NK)
   gK_S  <- matrix(0, nrow = T_school, ncol = NK)
