@@ -1,0 +1,175 @@
+\documentclass[11pt]{article}
+\usepackage[top = 2.2cm, bottom = 2.2cm, left = 2.2cm, right = 2.2cm]{geometry} 
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{changepage}
+\usepackage{multirow}
+\usepackage{booktabs} 
+\usepackage{graphicx}
+\usepackage{setspace}
+\usepackage{enumitem}
+\usepackage{float} 
+\usepackage{amsmath,amsfonts,amssymb,mathtools}
+\numberwithin{equation}{section}
+\numberwithin{figure}{section}
+\usepackage[dvipsnames,hyperref]{xcolor} 
+\usepackage{fancyhdr}
+\usepackage[section]{placeins} 
+\usepackage{titlesec}
+\usepackage{hyperref}
+\usepackage{caption} 
+\usepackage{subfig} 
+\usepackage{siunitx} 
+
+% English settings
+\renewcommand{\contentsname}{Contents}
+\renewcommand{\figurename}{Figure}
+\renewcommand{\tablename}{Table} 
+
+\hypersetup{
+    colorlinks,
+    linkcolor={blue!60!black}, 
+    citecolor={blue!60!black},
+    urlcolor={blue!80!black}
+}
+\titlelabel{\thetitle.\quad} 
+\definecolor{coolblack}{rgb}{0.0, 0.12, 0.29} 
+
+% Paths
+\graphicspath{{Output/Figures/}} 
+\setcounter{tocdepth}{2} 
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\footnotesize Computational Methods in Economics - Final Project}
+\rhead{\footnotesize Georges Mikhael Andraus}
+\cfoot{\footnotesize Final Project -- Page \thepage} 
+
+\usepackage{indentfirst} 
+\linespread{1.3} 
+
+\begin{document}
+\thispagestyle{empty}
+
+% HEADER
+\begin{tabular}{p{9.8cm}p{9cm}}
+{\large \bf São Paulo School of Economics} & \multicolumn{1}{r}{\large \bf Computational Methods}\\ 
+\large{\bf CMCD} & \multicolumn{1}{r}{\large \bf 1st Semester - 2026}\\ 
+\large Professor: Lucas Finamor & \multicolumn{1}{r}{\large Georges Andraus} 
+\\
+\vspace{0.3cm}
+\\
+\end{tabular}
+
+%TITLE
+\begin{tabular}{p{15.5cm}}
+\hline
+\vspace{-0.3cm}
+\center \Large{\textbf{Final Project: Evaluating the ``Pé-de-Meia'' Program}} 
+\vspace{0.1cm}
+\center \large{\textbf{A Life-Cycle Model with Discrete Choice and Stochastic Income}} 
+\vspace{0.4cm}
+\hrule
+\vspace{0.55cm}
+\end{tabular}
+
+\vspace{1cm}
+
+\noindent\textit{\textbf{Repository:} \url{https://github.com/georgesandraus/ComputationalMethods-FinalProject}}
+\\
+
+% AI DECLARATION
+\noindent\textit{\textbf{AI Usage Declaration:} Portions of the R code and the LaTeX structuring of this project were developed with the assistance of an LLM (Gemini 3.1 Pro Preview). The AI was primarily used to enforce good computational practices (such as functional programming, environment management via \texttt{renv}, optimizing grid evaluations, formatting outputs) and debugging the code. I've also followed Lucas Finamor's lecture notes' code structure as a general guide to partition my codes in different ones for better organization, as well as for the development of the model solving procedures. The economic framework, model conceptualization, and analytical interpretations are my own.}
+\vspace{-0.3cm}
+
+\section{Introduction and Economic Problem}
+
+High school dropout rates are a persistent challenge in Brazil, and is concentrated among low-income youth. These students often face a trade-off between investing in human capital (which may require immediate financial sacrifice) or enter the labor market early to afford basic consumption. This dynamic is exacerbated by binding credit constraints; low-income agents cannot smooth consumption by borrowing against their future high wages, trapping them in a low-skilled equilibrium. Recently, the Brazilian government implemented the ``Pé-de-Meia'' program, a conditional cash transfer that provides monthly stipends and graduation bonuses to low-income high school students. The goal of this project is to evaluate how this alters the optimal life-cycle decisions of credit-constrained agents. To achieve this, I augment the standard continuous consumption-savings model discussed in class into a structural Discrete-Continuous Choice Model under uncertainty.
+
+\vspace{-0.3cm}
+
+\section{The Model}
+
+I model a single agent living for a finite horizon of $T=50$ periods. At $t=1$, the agent makes an initial choice to either Work ($W$) or Study ($S$). Here, studying is a sequential decision: if the agent chooses to study in $t=1$, they also choose at $t=2$ and $t=3$ whether to remain in school or drop out to work. If the agent works, they enter the low-skilled labor market. Their income process follows a discrete Markov chain characterized by a low base wage ($w_L$) and a high-variance transition matrix, representing high job instability. If the agent studies, they remain in school for up to three periods: they earn no wages, pay an opportunity cost $c$, but receive the government benefit $B_t$ (the ``Pé-de-Meia''). If they complete $t=3$, they enter the labor market at $t=4$ as a high-skilled worker. They then face a different Markov chain with a higher base wage ($w_H > w_L$) and a low-variance transition matrix, capturing the "insurance" aspect of education. Agents have CRRA utility, are risk-averse, and face a strict zero-lower-bound borrowing constraint ($a_{t+1} \ge 0$).
+
+\vspace{-0.3cm}
+
+\section{Computational Strategy}
+
+\subsection{Backward Induction and Sequential Real Options}
+The model is solved numerically in a recursive manner. I define a log-spaced asset grid ($N_K=500$) to capture the curvature of the value function near the borrowing constraint. The computational innovation relies on decomposing the problem:
+\begin{enumerate}
+    \item I compute the entire lifetime value matrix for a Low-Skilled worker ($V^W$).
+    \item I compute the lifetime value matrix for a High-Skilled worker ($V^H$) from $T$ down to $t=4$.
+    \item For the schooling periods ($t=3, 2, 1$), I compute the student's value function ($V^S$), where the continuation value incorporates the real option to drop out: $V^{Opt}_{t+1} = \max\{V^S_{t+1}, V^W_{t+1}\}$.
+\end{enumerate}
+
+\subsection{Optimization, Interpolation, and Benchmarking}
+At each state, the agent chooses continuous savings $a_{t+1}$ via Brent's Method. Because savings are continuous but the state space is discretized, I use linear interpolation to evaluate expected future utility for off-grid points. I implemented a microbenchmark routine (Table \ref{tab:benchmark}) to define a grid size that gained in precision, but did not take much time to compute. Expanding the grid from $N_K=100$ to $N_K=500$ increased the execution time from roughly 12.5s to 105s, illustrating the curse of dimensionality, since the time consumption did not increase linearly with the grid size.
+
+\begin{table}[H] 
+    \centering 
+    \caption{Computational Performance: Execution Time by Asset Grid Size} 
+    \label{tab:benchmark} 
+    \resizebox{0.35\textwidth}{!}{%
+    \input{benchmark_results.tex}
+    }
+\end{table} 
+
+\vspace{-1cm}
+
+\section{Results and Counterfactuals}
+
+\subsection{The Value of Education and The Poverty Threshold}
+Figure \ref{fig:discrete} plots the expected lifetime utility evaluated at $t=1$ for the choice of Working versus Studying, conditional on initial wealth ($A_0$). For wealthier agents, the Study curve strictly dominates. The logic is straightforward: obtaining a high-skilled wage not only shifts the income profile permanently upward but also reduces income variance (acting as an insurance mechanism against negative Markov shocks). 
+
+However, the key mechanism of the model emerges at the left tail of the graph. For agents with very low initial wealth, the expected utility of studying drops precipitously, eventually crossing below the utility of working. The intersection of these two curves defines the threshold $A^* = 0.518$. The steep drop in the Study curve is driven by the CRRA utility function interacting with the strict borrowing constraint ($a_{t+1} \ge 0$). Because the net income during the first three periods of studying is negative (the opportunity cost $c$ outweighs the benefit $B_t$), a poor agent would be forced to reduce their consumption close to zero to avoid debt. The severe marginal utility penalty of near-zero consumption (starvation) mathematically forces agents endowed with $A_0 < 0.518$ to abandon their long-term prospects and choose the immediate, albeit lower, income of the working path.
+
+\vspace{-0.3cm}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.90\textwidth]{discrete_choice_t1.pdf}
+    \caption{Expected Lifetime Utility at $t=1$ and Threshold $A^*$}
+    \label{fig:discrete}
+\end{figure}
+
+\subsection{Mechanisms: The Sequential Dropout}
+To verify how the sequential mechanics operate in practice, I simulated the optimal consumption and asset accumulation paths for two types of agents: a relatively wealthy student ($A_0=1.0$) and a severely constrained agent ($A_0=0.3$). Figure \ref{fig:mechanisms} demonstrates that the wealthy student "survives" the 3 schooling periods. To finance their education without violating the borrowing constraint, they deplete their initial assets (hitting the zero lower bound at $t=3$). This forces their consumption to remain flat and low during the schooling years, and once education is completed in $t=4$, they transition to the high-skilled state (Status H), allowing both assets and consumption to grow.
+
+\vspace{-0.3cm}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.90\textwidth]{mechanism_paths.pdf}
+    \caption{Simulated Consumption and Asset Paths (Dropout Mechanism)}
+    \label{fig:mechanisms}
+\end{figure}
+
+Conversely, the poor agent ($A_0=0.3$) starts with insufficient buffer stock. Although the agent has the option to study, they anticipate that their assets would deplete too rapidly to sustain even minimum consumption throughout the three-year schooling period. Recognizing that they cannot survive this income shortfall without violating the borrowing constraint, the backward induction algorithm correctly predicts that their optimal decision is to forgo education from the very beginning. They enter the labor market immediately at 
+$t=1$ and are forced into the low-skilled trajectory (Status L), resulting in a much lower and flatter consumption path.
+
+\subsection{Policy Counterfactuals: The Timing of Benefits}
+A significant computational advantage of splitting the value functions is that testing policy counterfactuals during the schooling periods ($t \le 3$) is fast, as the post-schooling matrices ($V^W$ and $V^H$) do not need to be recomputed. Taking advantage of this, I tested four budget-neutral designs for the cash transfer program (each distributing exactly $0.6$ minimum wages over three years) to see how the timing of payments affects the poverty threshold $A^*$.
+
+As Table \ref{tab:policy} highlights, the complete absence of a policy results in large dropout rates, requiring an initial wealth of $A^* = 1.495$ just to survive the schooling years. The End-Loaded design (a lump-sum bonus at graduation) performs poorly ($A^* = 0.786$). Because agents are liquidity-constrained, the promise of future money cannot be borrowed against to finance current consumption, making the graduation bonus largely ineffective at preventing early dropouts.
+
+\begin{table}[H] 
+    \centering 
+    \caption{Policy Design Comparison: Minimum Wealth Required to Study} 
+    \label{tab:policy} 
+    \resizebox{0.25\textwidth}{!}{%
+    \input{policy_designs.tex}
+    }
+\end{table} 
+
+\vspace{-0.3cm}
+
+Surprisingly, the Even distribution baseline ($A^* = 0.518$) outperforms the Front-Loaded design, in which most of the benefit is given during the first year ($A^* = 0.697$). This was counterintuitive to me at first, since I assumed that giving the bulk of the money in the first year ($0.4, 0.1, 0.1$) would help the poorest agents the most. However, the model reveals that, because the opportunity cost of studying ($c$) is constant across all three periods, this type of benefit leaves the agent with a liquidity shortage in periods $t=2$ and $t=3$. Since they cannot borrow, the excess funds given in $t=1$ must be optimally saved to survive $t=3$. However, CRRA agents heavily penalize income volatility, so aligning the liquidity injections with the periods of income shortfall (like in the Even distribution) maximizes utility and allows the poorest marginal agents to stay in school even in the final years.
+
+\vspace{-0.3cm}
+
+\section{Conclusion}
+This project models the trade-offs between human capital accumulation, uncertainty, and credit constraints. The computational routines confirm that while education offers high premiums and insurance against shocks, borrowing frictions and sequential dropouts trap low-income agents in poverty. The counterfactual analysis shows that the mere magnitude of a policy is insufficient; the timing of liquidity injections must also align with the agents' consumption smoothing needs to effectively promote any sort of intergenerational mobility.
+
+\end{document}
