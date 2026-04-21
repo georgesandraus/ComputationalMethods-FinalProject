@@ -26,7 +26,7 @@ solve_model_path <- function(theta, omega, Kgrid, path) {
     wage_base   <- omega$w_H
     # Net income in t=1,2,3 for students: (Benefit - Cost). 
     # Negative value means they must borrow or rely on initial wealth.
-    costs_t123  <- rep(omega$benefit - omega$cost_edu, 3) 
+    costs_t123  <- omega$benefit_path - omega$cost_edu
   } else {
     stop("Path must be 'W' or 'S'")
   }

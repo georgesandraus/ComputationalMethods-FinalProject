@@ -110,10 +110,10 @@ p_choice <- ggplot(df_choice, aes(x = Initial_Wealth)) +
 ggsave("Output/Figures/discrete_choice_t1.png", p_choice, width = 8, height = 5, dpi = 300)
 
 # ==============================================================================
-# 5. Computational Benchmarking (N_Grid vs Execution Time)
+# 5. Computational Benchmarking (Updated for High NK)
 # ==============================================================================
 cat("\n--- Phase 4: Computational Benchmarking ---\n")
-cat("Running Microbenchmark for different Grid Sizes (NK)...\n")
+cat("Running Microbenchmark (NK=100 vs NK=500). Please wait, this takes time...\n")
 
 benchmark_model <- function(test_NK) {
   assign("NK", test_NK, envir = .GlobalEnv)
@@ -121,128 +121,122 @@ benchmark_model <- function(test_NK) {
   invisible(solve_model_path(theta, omega, test_Kgrid, path = "W"))
 }
 
+# Reduced to times=1 so your PC doesn't freeze for too long with NK=500
 mb_results <- microbenchmark(
-  "NK = 30" = benchmark_model(30),
-  "NK = 60" = benchmark_model(60),
-  times = 3 
+  "NK = 100" = benchmark_model(100),
+  "NK = 500" = benchmark_model(500),
+  times = 1 
 )
 
-assign("NK", 60, envir = .GlobalEnv)
-print(mb_results)
+assign("NK", 500, envir = .GlobalEnv) # Restore your high precision grid
 
-# Fix: Force summary to use seconds so we don't crush the numbers
 df_bench <- summary(mb_results, unit = "s") %>%
   mutate(
     Grid_Size = expr,
-    Mean_Time_Seconds = round(mean, 2),
-    Min_Time_Seconds  = round(min, 2),
-    Max_Time_Seconds  = round(max, 2)
+    Execution_Time_Seconds = round(mean, 2)
   ) %>%
-  select(Grid_Size, Mean_Time_Seconds, Min_Time_Seconds, Max_Time_Seconds)
+  select(Grid_Size, Execution_Time_Seconds)
 
 stargazer(df_bench, type = "latex", summary = FALSE, rownames = FALSE,
-          title = "Computational Performance: Execution Time by Asset Grid Size",
-          out = "Output/Tables/benchmark_results.tex",
-          float = FALSE)
-
-cat("\nProject Code Execution Completed Successfully. Outputs saved to /Output.\n")
+          title = "Computational Performance by Asset Grid Size",
+          out = "Output/Tables/benchmark_results.tex", float = FALSE)
 
 # ==============================================================================
 # 6. Mechanism: Monte Carlo Simulation of Paths
 # ==============================================================================
-cat("\n--- Phase 5: Simulating Life-Cycle Paths (Mechanisms) ---\n")
+cat("\n--- Phase 5: Simulating Life-Cycle Paths ---\n")
 
-# We simulate the exact policy paths for a given initial wealth
 simulate_agent <- function(sol, path, initial_wealth) {
-  a <- numeric(T_periods + 1)
-  c <- numeric(T_periods)
+  a <- numeric(T_periods + 1); c <- numeric(T_periods)
   a[1] <- initial_wealth
   
-  # For simplicity, we assume they stay in the 'Normal' income state (y=2)
-  # A full MC would draw from the Markov TM, but here we want clean mechanism visualization
   for (t in 1:T_periods) {
     if (path == "S" && t <= T_school) {
-      inc <- omega$benefit - omega$cost_edu
+      inc <- omega$benefit_path[t] - omega$cost_edu
     } else if (path == "S" && t > T_school) {
       inc <- omega$w_H * omega$Y_H_grid[2]
     } else {
       inc <- omega$w_L * omega$Y_L_grid[2]
     }
-    
-    # Interpolate policy function to find optimal savings for tomorrow
     a1 <- interp1D(Kgrid[t+1, ], sol$gK[t, , 2], a[t])
     a[t+1] <- a1
-    
-    # Budget constraint
     c[t] <- a[t] + inc - a1 / (1.0 + theta$r)
   }
   return(data.frame(Age = 1:T_periods, Consumption = c, Assets = a[1:T_periods], Path = path, A0 = initial_wealth))
 }
 
-# Simulate a "Rich" student (A0 = 1.0) and a "Poor" worker (A0 = 0.2)
 sim_student <- simulate_agent(sol_S, "S", 1.0)
-sim_worker  <- simulate_agent(sol_W, "W", 0.2)
+sim_worker  <- simulate_agent(sol_W, "W", 0.3)
 
-df_sims <- bind_rows(sim_student, sim_worker) %>%
-  mutate(Profile = paste(Path, "A0 =", A0))
+p_mechanisms <- bind_rows(sim_student, sim_worker) %>%
+  mutate(Profile = paste(Path, "A0 =", A0)) %>%
+  pivot_longer(cols = c(Consumption, Assets), names_to = "Variable", values_to = "Value") %>%
+  ggplot(aes(x = Age, y = Value, color = Profile, linetype = Profile)) +
+  geom_line(linewidth = 1) + facet_wrap(~Variable, scales = "free_y", ncol=1) +
+  labs(title = "Life-Cycle Mechanisms: Consumption and Assets", x = "Age (Periods)") + theme_minimal()
 
-p_cons <- ggplot(df_sims, aes(x = Age, y = Consumption, color = Profile, linetype = Profile)) +
-  geom_line(linewidth = 1) +
-  labs(title = "Consumption Path Mechanism", y = "Consumption") + theme_minimal()
-
-p_assets <- ggplot(df_sims, aes(x = Age, y = Assets, color = Profile, linetype = Profile)) +
-  geom_line(linewidth = 1) +
-  labs(title = "Asset Accumulation Mechanism", y = "Assets") + theme_minimal()
-
-p_mechanisms <- p_cons / p_assets
 ggsave("Output/Figures/mechanism_paths.png", p_mechanisms, width = 8, height = 7, dpi = 300)
 
-
 # ==============================================================================
-# 7. Robustness and Counterfactuals (Changing Parameters)
+# 7. Policy Counterfactuals: The Timing of Benefits
 # ==============================================================================
-cat("\n--- Phase 6: Robustness to Interest Rate and Policy Benefit ---\n")
+cat("\n--- Phase 6: Testing Different Program Designs (Timing) ---\n")
 
-# Helper function to compute Threshold A* for a given parameter set
-get_threshold <- function(temp_theta, temp_omega) {
-  temp_MinMaxA <- min_and_max_assets(temp_theta, max_possible_income)
-  temp_Kgrid   <- get_K_Grid(temp_theta, temp_MinMaxA)
-  
-  t_sol_W <- solve_model_path(temp_theta, temp_omega, temp_Kgrid, "W")
-  t_sol_S <- solve_model_path(temp_theta, temp_omega, temp_Kgrid, "S")
-  
-  diff <- t_sol_S$V[1, , temp_omega$Yint_0] - t_sol_W$V[1, , temp_omega$Yint_0]
-  
-  idx <- which(diff >= 0)[1]
-  if(is.na(idx)) return(NA)
-  return(temp_Kgrid[1, idx])
-}
-
-# 7.1 Robustness to Interest Rate (r = 0.02 vs r = 0.08)
-cat("Testing Interest Rates...\n")
-theta_low_r <- theta; theta_low_r$r <- 0.02
-theta_high_r <- theta; theta_high_r$r <- 0.08
-
-A_star_low_r <- get_threshold(theta_low_r, omega)
-A_star_high_r <- get_threshold(theta_high_r, omega)
-
-# 7.2 Counterfactual Policy (Doubling the Benefit B)
-cat("Testing Policy Counterfactual...\n")
-omega_high_B <- omega; omega_high_B$benefit <- 0.4
-
-A_star_high_B <- get_threshold(theta, omega_high_B)
-
-# Compile results
-df_robust <- data.frame(
-  Scenario = c("Baseline (r=0.05, B=0.2)", "Low Interest (r=0.02)", "High Interest (r=0.08)", "Expanded Policy (B=0.4)"),
-  Threshold_A_star = c(A_star, A_star_low_r, A_star_high_r, A_star_high_B)
+# Different strategies distributing the exact same total budget (0.6)
+policy_designs <- list(
+  "No Policy"             = c(0.0, 0.0, 0.0),
+  "Even (Baseline)"       = c(0.2, 0.2, 0.2),
+  "End-Loaded (Bonus)"    = c(0.0, 0.0, 0.6), # Big bonus at graduation
+  "Front-Loaded (Rescue)" = c(0.4, 0.1, 0.1)  # Heavy support in the 1st year
 )
 
-print(df_robust)
+df_policy_V <- data.frame()
+thresholds <- list()
 
-stargazer(df_robust, type = "latex", summary = FALSE, rownames = FALSE,
-          title = "Sensitivity Analysis: Minimum Wealth to Study (Threshold A*)",
-          out = "Output/Tables/robustness_thresholds.tex",
-          float = FALSE)
+for (p_name in names(policy_designs)) {
+  temp_omega <- omega
+  temp_omega$benefit_path <- policy_designs[[p_name]]
+  
+  # Re-solve ONLY the Study path (Work path doesn't change)
+  t_sol_S <- solve_model_path(theta, temp_omega, Kgrid, "S")
+  V_S_temp <- t_sol_S$V[1, , temp_omega$Yint_0]
+  
+  diff <- V_S_temp - V1_W
+  idx <- which(diff >= 0)[1]
+  A_star <- ifelse(is.na(idx), NA, round(Kgrid[1, idx], 3))
+  thresholds[[p_name]] <- A_star
+  
+  df_policy_V <- bind_rows(df_policy_V, data.frame(
+    Initial_Wealth = Kgrid[1, ], V_Study = V_S_temp, Policy = p_name
+  ))
+}
+
+# Table of Thresholds
+df_policy_results <- data.frame(
+  Program_Design = names(thresholds),
+  Threshold_A_star = unlist(thresholds)
+)
+print(df_policy_results)
+
+stargazer(df_policy_results, type = "latex", summary = FALSE, rownames = FALSE,
+          title = "Policy Design Comparison: Minimum Wealth Required to Study",
+          out = "Output/Tables/policy_designs.tex", float = FALSE)
+
+# Plotting the Value Functions of the Policies
+df_plot_policy <- df_policy_V %>% filter(Initial_Wealth <= 2.0 & V_Study > -100)
+df_plot_W <- df_choice %>% filter(Initial_Wealth <= 2.0 & V_Work > -100)
+
+p_designs <- ggplot() +
+  geom_line(data = df_plot_W, aes(x = Initial_Wealth, y = V_Work, linetype = "Work (Outside Option)"), color = "black", linewidth = 1) +
+  geom_line(data = df_plot_policy, aes(x = Initial_Wealth, y = V_Study, color = Policy), linewidth = 1.2) +
+  coord_cartesian(ylim = c(-30, -5)) +
+  labs(
+    title = "Impact of Benefit Timing on Lifetime Utility",
+    subtitle = "Front-loading helps the poorest cross the threshold; End-loading fails due to credit constraints.",
+    x = "Initial Wealth (Assets)", y = "Expected Lifetime Utility at t=1", color = "Program Design", linetype = ""
+  ) +
+  theme_minimal() + theme(legend.position = "right")
+
+ggsave("Output/Figures/policy_designs_comparison.png", p_designs, width = 9, height = 5, dpi = 300)
 
 cat("\nProject Code Execution Completed Successfully. Outputs saved to /Output.\n")
