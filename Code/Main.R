@@ -201,7 +201,6 @@ p_mechanisms <- bind_rows(sim_rich, sim_poor) %>%
 ggsave("Output/Figures/mechanism_paths.pdf", p_mechanisms, 
        width = 8, height = 6, dpi = 300)
 
-
 # ==============================================================================
 # 7. Policy Counterfactuals: The Timing of Benefits
 # ==============================================================================
