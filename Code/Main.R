@@ -188,7 +188,9 @@ sim_rich <- simulate_agent(1.0)
 sim_poor <- simulate_agent(0.3)
 
 p_mechanisms <- bind_rows(sim_rich, sim_poor) %>%
-  mutate(Profile = paste("A0 =", A0, "| Ends as:", Status[T_periods])) %>%
+  group_by(A0) %>%
+  mutate(Profile = paste("A0 =", A0, "| Ends as:", Status[n()])) %>%
+  ungroup() %>%
   pivot_longer(cols = c(Consumption, Assets), 
                names_to = "Variable", values_to = "Value") %>%
   ggplot(aes(x = Age, y = Value, color = Profile, linetype = Profile)) +
@@ -197,7 +199,7 @@ p_mechanisms <- bind_rows(sim_rich, sim_poor) %>%
        x = "Age (Periods)") + theme_minimal()
 
 ggsave("Output/Figures/mechanism_paths.pdf", p_mechanisms, 
-       width = 8, height = 7, dpi = 300)
+       width = 8, height = 6, dpi = 300)
 
 
 # ==============================================================================
