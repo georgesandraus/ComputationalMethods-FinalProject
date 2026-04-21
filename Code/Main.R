@@ -2,7 +2,7 @@
 # Computational Methods in Economics - Final Project
 # Author: Georges Mikhael Andraus
 # Description: Evaluating the "Pé-de-Meia" Program via a Life-Cycle Model 
-#              with Initial Discrete Choice and Stochastic Income.
+#              with Sequential Discrete Choices and Stochastic Income.
 # ==============================================================================
 
 # ==============================================================================
@@ -35,43 +35,42 @@ source("Code/solveModel.R")
 # ==============================================================================
 cat("\n--- Phase 1: Initializing Model Constraints ---\n")
 
-# Check parameter feasibility (e.g. positive risk aversion, valid beta)
 check_parameters(theta, omega)
 
-# Determine the absolute maximum possible income across all paths to set the Asset Grid upper bound
 max_possible_income <- max(
   omega$w_L * max(omega$Y_L_grid), 
   omega$w_H * max(omega$Y_H_grid)
 )
 
-# Get Min and Max Asset bounds
 MinMaxA <- min_and_max_assets(theta, max_possible_income)
-
-# Build the Log-spaced Asset Grid
-Kgrid <- get_K_Grid(theta, MinMaxA)
+Kgrid   <- get_K_Grid(theta, MinMaxA)
 
 cat("Asset Grid dimensions:", nrow(Kgrid), "periods x", ncol(Kgrid), "nodes.\n")
 
 # ==============================================================================
-# 3. Model Solution (Backward Induction for both Paths)
+# 3. Model Solution (Backward Induction for Sequential Paths)
 # ==============================================================================
 cat("\n--- Phase 2: Solving Dynamic Programming Paths ---\n")
 
-# Solve the entire life-cycle assuming the agent enters the labor market immediately (Low-Skilled)
-cat("Solving Work Path (W)...\n")
-sol_W <- solve_model_path(theta, omega, Kgrid, path = "W")
+# Path 1: Worker (Low-Skilled) from t=1 to T
+cat("Solving Worker Life-Cycle (Low-Skilled)...\n")
+sol_W <- solve_worker_path(theta, omega, Kgrid, skill = "L")
 
-# Solve the entire life-cycle assuming the agent studies for t=1,2,3 (High-Skilled)
-cat("Solving Study Path (S)...\n")
-sol_S <- solve_model_path(theta, omega, Kgrid, path = "S")
+# Path 2: Worker (High-Skilled) from t=4 to T
+cat("Solving Worker Life-Cycle (High-Skilled)...\n")
+sol_H <- solve_worker_path(theta, omega, Kgrid, skill = "H")
+
+# Path 3: Student (t=1, 2, 3) with Sequential Dropout Option
+cat("Solving Student Path (Sequential Dropout Option)...\n")
+sol_S <- solve_student_path(theta, omega, Kgrid, sol_W$V, sol_H$V)
 
 # ==============================================================================
-# 4. The Discrete Choice at t=1
+# 4. The Initial Discrete Choice at t=1
 # ==============================================================================
 cat("\n--- Phase 3: Evaluating Initial Discrete Choice ---\n")
 
 V1_W <- sol_W$V[1, , omega$Yint_0]
-V1_S <- sol_S$V[1, , omega$Yint_0]
+V1_S <- sol_S$V_S[1, ]
 
 df_choice <- data.frame(
   Initial_Wealth = Kgrid[1, ],
@@ -82,35 +81,35 @@ df_choice <- data.frame(
   mutate(Optimal_Choice = ifelse(V_Study >= V_Work, "Study", "Work"))
 
 threshold_idx <- which(df_choice$V_Study >= df_choice$V_Work)[1]
-A_star <- ifelse(is.na(threshold_idx), "Never", round(df_choice$Initial_Wealth[threshold_idx], 3))
+A_star <- ifelse(is.na(threshold_idx), "Never", 
+                 round(df_choice$Initial_Wealth[threshold_idx], 3))
 
 cat("Minimum Initial Wealth required to study (Threshold A*):", A_star, "\n")
 
-# Plotting the Value Functions at t=1 (WITH ZOOM)
 p_choice <- ggplot(df_choice, aes(x = Initial_Wealth)) +
-  geom_line(aes(y = V_Work, color = "Work (Low-Skilled)"), linewidth = 1.2) +
-  geom_line(aes(y = V_Study, color = "Study (High-Skilled)"), linewidth = 1.2) +
-  geom_vline(xintercept = as.numeric(A_star), linetype = "dashed", color = "black") +
-  # Place the annotation dynamically near the threshold
+  geom_line(aes(y = V_Work, color = "Work (Dropout)"), linewidth = 1.2) +
+  geom_line(aes(y = V_Study, color = "Study"), linewidth = 1.2) +
+  geom_vline(xintercept = as.numeric(A_star), linetype = "dashed", 
+             color = "black") +
   annotate("text", x = as.numeric(A_star) + 0.5, y = -15, 
            label = paste("Threshold A* =", A_star), fontface = "bold") +
-  # ZOOM IN on the relevant area to avoid the starvation drop distortion
   coord_cartesian(ylim = c(-60, 0), xlim = c(0, 3.5)) + 
   labs(
-    title = "Expected Lifetime Utility at t=1",
-    subtitle = "Zoomed in. The vertical line is the minimum wealth needed to afford education.",
+    title = "",
+    subtitle = "",
     x = "Initial Wealth (Assets)",
     y = "Value Function V(a, t=1)",
     color = "Choice"
   ) +
-  scale_color_manual(values = c("Study (High-Skilled)" = "#E64B35", "Work (Low-Skilled)" = "#4DBBD5")) +
+  scale_color_manual(values = c("Study" = "#E64B35", 
+                                "Work (Dropout)" = "#4DBBD5")) +
   theme_minimal() +
   theme(legend.position = "bottom")
 
-ggsave("Output/Figures/discrete_choice_t1.png", p_choice, width = 8, height = 5, dpi = 300)
+ggsave("Output/Figures/discrete_choice_t1.pdf", p_choice, width = 8, height = 5, dpi = 300)
 
 # ==============================================================================
-# 5. Computational Benchmarking (Updated for High NK)
+# 5. Computational Benchmarking (N_Grid vs Execution Time)
 # ==============================================================================
 cat("\n--- Phase 4: Computational Benchmarking ---\n")
 cat("Running Microbenchmark (NK=100 vs NK=500). Please wait, this takes time...\n")
@@ -118,17 +117,16 @@ cat("Running Microbenchmark (NK=100 vs NK=500). Please wait, this takes time...\
 benchmark_model <- function(test_NK) {
   assign("NK", test_NK, envir = .GlobalEnv)
   test_Kgrid <- get_K_Grid(theta, MinMaxA)
-  invisible(solve_model_path(theta, omega, test_Kgrid, path = "W"))
+  invisible(solve_worker_path(theta, omega, test_Kgrid, skill = "L"))
 }
 
-# Reduced to times=1 so your PC doesn't freeze for too long with NK=500
 mb_results <- microbenchmark(
   "NK = 100" = benchmark_model(100),
   "NK = 500" = benchmark_model(500),
   times = 1 
 )
 
-assign("NK", 500, envir = .GlobalEnv) # Restore your high precision grid
+assign("NK", 500, envir = .GlobalEnv) # Restore high precision grid
 
 df_bench <- summary(mb_results, unit = "s") %>%
   mutate(
@@ -137,52 +135,75 @@ df_bench <- summary(mb_results, unit = "s") %>%
   ) %>%
   select(Grid_Size, Execution_Time_Seconds)
 
+print(df_bench)
+
 stargazer(df_bench, type = "latex", summary = FALSE, rownames = FALSE,
           title = "Computational Performance by Asset Grid Size",
           out = "Output/Tables/benchmark_results.tex", float = FALSE)
 
-# ==============================================================================
-# 6. Mechanism: Monte Carlo Simulation of Paths
-# ==============================================================================
-cat("\n--- Phase 5: Simulating Life-Cycle Paths ---\n")
 
-simulate_agent <- function(sol, path, initial_wealth) {
-  a <- numeric(T_periods + 1); c <- numeric(T_periods)
+# ==============================================================================
+# 6. Mechanism: Monte Carlo Simulation of Paths (Sequential Dropout)
+# ==============================================================================
+cat("\n--- Phase 5: Simulating Life-Cycle Paths with Dropout Mechanism ---\n")
+
+simulate_agent <- function(initial_wealth) {
+  a <- numeric(T_periods + 1); c <- numeric(T_periods); status <- rep("W", 
+                                                                      T_periods)
   a[1] <- initial_wealth
+  currently_studying <- TRUE
   
   for (t in 1:T_periods) {
-    if (path == "S" && t <= T_school) {
-      inc <- omega$benefit_path[t] - omega$cost_edu
-    } else if (path == "S" && t > T_school) {
-      inc <- omega$w_H * omega$Y_H_grid[2]
-    } else {
-      inc <- omega$w_L * omega$Y_L_grid[2]
+    # Check Sequential Dropout Option
+    if (currently_studying && t <= T_school) {
+      v_s <- interp1D(Kgrid[t, ], sol_S$V_S[t, ], a[t])
+      v_w <- interp1D(Kgrid[t, ], sol_W$V[t, , omega$Yint_0], a[t])
+      if (v_w > v_s) currently_studying <- FALSE
     }
-    a1 <- interp1D(Kgrid[t+1, ], sol$gK[t, , 2], a[t])
+    
+    if (currently_studying && t <= T_school) {
+      status[t] <- "S"
+      inc <- omega$benefit_path[t] - omega$cost_edu
+      a1 <- interp1D(Kgrid[t+1, ], sol_S$gK_S[t, ], a[t])
+    } else if (currently_studying && t > T_school) {
+      status[t] <- "H"
+      inc <- omega$w_H * omega$Y_H_grid[omega$Yint_0]
+      a1 <- interp1D(Kgrid[t+1, ], sol_H$gK[t, , omega$Yint_0], a[t])
+    } else {
+      status[t] <- "L"
+      inc <- omega$w_L * omega$Y_L_grid[omega$Yint_0]
+      a1 <- interp1D(Kgrid[t+1, ], sol_W$gK[t, , omega$Yint_0], a[t])
+    }
+    
     a[t+1] <- a1
     c[t] <- a[t] + inc - a1 / (1.0 + theta$r)
   }
-  return(data.frame(Age = 1:T_periods, Consumption = c, Assets = a[1:T_periods], Path = path, A0 = initial_wealth))
+  return(data.frame(Age = 1:T_periods, Consumption = c, 
+                    Assets = a[1:T_periods], 
+                    Status = status, A0 = initial_wealth))
 }
 
-sim_student <- simulate_agent(sol_S, "S", 1.0)
-sim_worker  <- simulate_agent(sol_W, "W", 0.3)
+sim_rich <- simulate_agent(1.0)
+sim_poor <- simulate_agent(0.3)
 
-p_mechanisms <- bind_rows(sim_student, sim_worker) %>%
-  mutate(Profile = paste(Path, "A0 =", A0)) %>%
-  pivot_longer(cols = c(Consumption, Assets), names_to = "Variable", values_to = "Value") %>%
+p_mechanisms <- bind_rows(sim_rich, sim_poor) %>%
+  mutate(Profile = paste("A0 =", A0, "| Ends as:", Status[T_periods])) %>%
+  pivot_longer(cols = c(Consumption, Assets), 
+               names_to = "Variable", values_to = "Value") %>%
   ggplot(aes(x = Age, y = Value, color = Profile, linetype = Profile)) +
   geom_line(linewidth = 1) + facet_wrap(~Variable, scales = "free_y", ncol=1) +
-  labs(title = "Life-Cycle Mechanisms: Consumption and Assets", x = "Age (Periods)") + theme_minimal()
+  labs(title = "", 
+       x = "Age (Periods)") + theme_minimal()
 
-ggsave("Output/Figures/mechanism_paths.png", p_mechanisms, width = 8, height = 7, dpi = 300)
+ggsave("Output/Figures/mechanism_paths.pdf", p_mechanisms, 
+       width = 8, height = 7, dpi = 300)
+
 
 # ==============================================================================
 # 7. Policy Counterfactuals: The Timing of Benefits
 # ==============================================================================
 cat("\n--- Phase 6: Testing Different Program Designs (Timing) ---\n")
 
-# Different strategies distributing the exact same total budget (0.6)
 policy_designs <- list(
   "No Policy"             = c(0.0, 0.0, 0.0),
   "Even (Baseline)"       = c(0.2, 0.2, 0.2),
@@ -197,9 +218,9 @@ for (p_name in names(policy_designs)) {
   temp_omega <- omega
   temp_omega$benefit_path <- policy_designs[[p_name]]
   
-  # Re-solve ONLY the Study path (Work path doesn't change)
-  t_sol_S <- solve_model_path(theta, temp_omega, Kgrid, "S")
-  V_S_temp <- t_sol_S$V[1, , temp_omega$Yint_0]
+  # Re-solve ONLY the Study path (Work paths sol_W and sol_H are reused!)
+  t_sol_S <- solve_student_path(theta, temp_omega, Kgrid, sol_W$V, sol_H$V)
+  V_S_temp <- t_sol_S$V_S[1, ]
   
   diff <- V_S_temp - V1_W
   idx <- which(diff >= 0)[1]
@@ -211,7 +232,6 @@ for (p_name in names(policy_designs)) {
   ))
 }
 
-# Table of Thresholds
 df_policy_results <- data.frame(
   Program_Design = names(thresholds),
   Threshold_A_star = unlist(thresholds)
@@ -227,8 +247,11 @@ df_plot_policy <- df_policy_V %>% filter(Initial_Wealth <= 2.0 & V_Study > -100)
 df_plot_W <- df_choice %>% filter(Initial_Wealth <= 2.0 & V_Work > -100)
 
 p_designs <- ggplot() +
-  geom_line(data = df_plot_W, aes(x = Initial_Wealth, y = V_Work, linetype = "Work (Outside Option)"), color = "black", linewidth = 1) +
-  geom_line(data = df_plot_policy, aes(x = Initial_Wealth, y = V_Study, color = Policy), linewidth = 1.2) +
+  geom_line(data = df_plot_W, aes(x = Initial_Wealth, y = V_Work, 
+                                  linetype = "Work (Outside Option)"), 
+            color = "black", linewidth = 1) +
+  geom_line(data = df_plot_policy, aes(x = Initial_Wealth, y = V_Study, 
+                                       color = Policy), linewidth = 1.2) +
   coord_cartesian(ylim = c(-30, -5)) +
   labs(
     title = "Impact of Benefit Timing on Lifetime Utility",
@@ -237,6 +260,6 @@ p_designs <- ggplot() +
   ) +
   theme_minimal() + theme(legend.position = "right")
 
-ggsave("Output/Figures/policy_designs_comparison.png", p_designs, width = 9, height = 5, dpi = 300)
+ggsave("Output/Figures/policy_designs_comparison.pdf", p_designs, width = 9, height = 5, dpi = 300)
 
 cat("\nProject Code Execution Completed Successfully. Outputs saved to /Output.\n")

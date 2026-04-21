@@ -4,11 +4,11 @@
 # ==============================================================================
 
 # Environment 
-T_periods <- 50     # Number of time periods (e.g., age 15 to 65)
-T_school  <- 3      # Periods where studying is a choice (t = 1, 2, 3)
-NK        <- 500    # Number of points in the asset grid (High precision)
-NY        <- 3      # Number of states in the income Markov process
-NSIM      <- 10000  # Number of simulated individuals
+T_periods <- 50    # Number of time periods (e.g., age 15 to 65)
+T_school  <- 3     # Periods where studying is a choice (t = 1, 2, 3)
+NK        <- 500   # Number of points in the asset grid
+NY        <- 3     # Number of states in the income Markov process
+NSIM      <- 10000 # Number of simulated individuals
 
 # Preferences and Financial Parameters (theta)
 theta <- list(
@@ -28,9 +28,9 @@ omega <- list(
   # Education parameters
   cost_edu = 0.3,  # Opportunity/direct cost of studying per period
   
-  # NEW: "Pé-de-Meia" conditional cash transfer is now a path over the 3 schooling years.
-  # The baseline distributes an approx. value of .6 minimum wages evenly (.2 per year).
-  benefit_path = c(0.2, 0.2, 0.2), 
+  # "Pé-de-Meia" conditional cash transfer per period, with an approx. total value of 0.6.
+  # Now a vector allowing us to test different timing designs (e.g., front-loaded vs end-loaded)
+  benefit_path  = c(0.2, 0.2, 0.2), 
   
   # Markov Process for Low-Skilled (High Variance / High Risk)
   Y_L_grid = c(0.6, 1.0, 1.4),  # Bad, Normal, Good states
