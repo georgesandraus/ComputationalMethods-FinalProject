@@ -6,9 +6,9 @@
 # Environment 
 T_periods <- 50    # Number of time periods (e.g., age 15 to 65)
 T_school  <- 3     # Periods where studying is a choice (t = 1, 2, 3)
-NK        <- 60    # Number of points in the asset grid
+NK        <- 500    # Number of points in the asset grid
 NY        <- 3     # Number of states in the income Markov process
-NSIM      <- 1000  # Number of simulated individuals
+NSIM      <- 10000  # Number of simulated individuals
 
 # Preferences and Financial Parameters (theta)
 theta <- list(
@@ -22,12 +22,13 @@ theta <- list(
 # Income, Policy, and Markov Parameters (omega)
 omega <- list(
   # Base wages
-  w_L = 1.0,       # Base wage for Low-Skilled (e.g., 1 minimum wage)
+  w_L = 1.0,       # Base wage for Low-Skilled (in minimum wages)
   w_H = 2.5,       # Base wage for High-Skilled
   
   # Education parameters
   cost_edu = 0.3,  # Opportunity/direct cost of studying per period
-  benefit  = 0.2,  # "Pé-de-Meia" conditional cash transfer per period
+  benefit  = 0.2,  # "Pé-de-Meia" conditional cash transfer per period, with
+                   # an approx. value of .2 minimum wages
   
   # Markov Process for Low-Skilled (High Variance / High Risk)
   Y_L_grid = c(0.6, 1.0, 1.4),  # Bad, Normal, Good states
